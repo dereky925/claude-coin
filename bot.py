@@ -37,6 +37,8 @@ def _config():
     position_dollars = int(pd_raw) if pd_raw.isdigit() else None
     paper_raw = os.getenv("BOT_PAPER", os.getenv("APCA_PAPER", "true")).lower()
     paper = paper_raw in ("true", "1", "yes")
+    agent_raw = os.getenv("BOT_USE_AGENT", "false").lower()
+    use_agent = agent_raw in ("true", "1", "yes")
     return {
         "symbols": symbols,
         "fast_period": fast,
@@ -45,6 +47,7 @@ def _config():
         "position_size": max(1, position_size),
         "position_dollars": position_dollars,
         "paper": paper,
+        "use_agent": use_agent,
     }
 
 
@@ -129,6 +132,8 @@ def run_once(cfg: dict, trading_client, data_client, log):
 
     from strategies.momentum import signal_at_end
 
+    use_agent = cfg.get("use_agent", False)
+
     for symbol in cfg["symbols"]:
         closes = _get_bars(data_client, symbol, cfg["slow_period"])
         if closes is None or len(closes) < cfg["slow_period"]:
@@ -141,13 +146,24 @@ def run_once(cfg: dict, trading_client, data_client, log):
             slow_period=cfg["slow_period"],
         )
         qty = _get_position_qty(trading_client, symbol)
+        latest_close = float(closes.iloc[-1]) if not closes.empty else 0.0
 
         if signal == "buy" and qty == 0:
-            latest_close = float(closes.iloc[-1])
-            if cfg.get("position_dollars"):
-                buy_qty = max(1, int(cfg["position_dollars"] / latest_close))
-            else:
-                buy_qty = cfg["position_size"]
+            buy_qty = max(1, int(cfg["position_dollars"] / latest_close)) if cfg.get("position_dollars") else cfg["position_size"]
+            if use_agent:
+                try:
+                    from agent.agent import get_agent_action
+                    adv = get_agent_action(symbol, "buy", latest_close, 0.0, use_agent=True)
+                    action, reason = adv.get("action", "confirm"), adv.get("reason", "")
+                    log.info("%s agent action=%s reason=%s", symbol, action, reason[:80] if reason else "")
+                    if action == "skip" or action == "override_sell":
+                        log.info("%s BUY skipped by agent", symbol)
+                        continue
+                    if action == "reduce":
+                        buy_qty = max(1, buy_qty // 2)
+                except Exception as e:
+                    log.warning("%s agent error, skip trade: %s", symbol, e)
+                    continue
             order_data = MarketOrderRequest(
                 symbol=symbol,
                 qty=buy_qty,
@@ -164,6 +180,20 @@ def run_once(cfg: dict, trading_client, data_client, log):
                 pass
         elif signal == "sell" and qty > 0:
             sell_qty = int(qty) if qty >= 1 else 1
+            if use_agent:
+                try:
+                    from agent.agent import get_agent_action
+                    adv = get_agent_action(symbol, "sell", latest_close, qty, use_agent=True)
+                    action, reason = adv.get("action", "confirm"), adv.get("reason", "")
+                    log.info("%s agent action=%s reason=%s", symbol, action, reason[:80] if reason else "")
+                    if action == "skip":
+                        log.info("%s SELL skipped by agent", symbol)
+                        continue
+                    if action == "reduce":
+                        sell_qty = max(1, sell_qty // 2)
+                except Exception as e:
+                    log.warning("%s agent error, skip trade: %s", symbol, e)
+                    continue
             pos = _get_position(trading_client, symbol)
             pnl_dollars = None
             if pos and float(pos.qty or 0) != 0:
