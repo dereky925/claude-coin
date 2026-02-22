@@ -358,7 +358,7 @@ def main():
     try:
         from telegram_notify import _is_configured, send_message
         if _is_configured():
-            send_message("🪙 Claude Coin bot starting…")
+            send_message("🪙 Claude Coin Bot Starting… 🤖💤")
             log.info("Telegram startup message sent")
         else:
             log.info("Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)")
@@ -377,11 +377,11 @@ def main():
     try:
         from telegram_notify import _is_configured, notify_account_status, send_message
         if _is_configured():
-            symbols_preview = ", ".join(cfg["symbols"][:5]) + (" …" if len(cfg["symbols"]) > 5 else "")
+            symbols_line = ", ".join(cfg["symbols"])
             send_message(
                 f"🪙 Claude Coin bot started\n\n"
                 f"Mode: {mode}\n"
-                f"Symbols: {symbols_preview}\n"
+                f"Tickers: {symbols_line}\n"
                 f"Interval: {cfg['interval_minutes']} min"
             )
             try:

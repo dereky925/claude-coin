@@ -180,7 +180,7 @@ def main():
 
     from telegram_notify import send_message
     send_message(
-        "🪙 Claude Coin — commands\n\n"
+        "🪙 Claude Coin Commands 🦾\n\n"
         "/report — status + SMA charts\n"
         "/status — same as report\n"
         "/news — market news (SPY)\n"
