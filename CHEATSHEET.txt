@@ -1,0 +1,47 @@
+# Claude Coin — command cheatsheet
+
+## Restart bot / load new changes
+
+  cd "/root/Claude Coin"
+  pm2 restart claude-coin-bot
+
+Restart both trading bot and Telegram command listener:
+
+  pm2 restart all
+
+Or reload from ecosystem config (after editing ecosystem.config.cjs):
+
+  pm2 delete all
+  pm2 start ecosystem.config.cjs
+  pm2 save
+
+## PM2 basics
+
+  pm2 status
+  pm2 logs claude-coin-bot
+  pm2 logs telegram-commands
+  pm2 logs claude-coin-bot --lines 50
+  pm2 restart claude-coin-bot
+  pm2 restart telegram-commands
+  pm2 stop claude-coin-bot
+  pm2 start claude-coin-bot
+  pm2 flush claude-coin-bot
+
+## Start everything (after reboot or first time)
+
+  cd "/root/Claude Coin"
+  pm2 start ecosystem.config.cjs
+  pm2 save
+
+## Manual report (no Telegram trigger)
+
+  cd "/root/Claude Coin"
+  .venv/bin/python status_report.py
+
+## Daily report (cron example — 9 AM)
+
+  0 9 * * * cd "/root/Claude Coin" && /root/Claude\ Coin/.venv/bin/python daily_report.py
+
+## Test Telegram
+
+  .venv/bin/python telegram_notify.py
