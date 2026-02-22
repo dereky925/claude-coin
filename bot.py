@@ -379,7 +379,7 @@ def main():
         if _is_configured():
             symbols_line = ", ".join(cfg["symbols"])
             send_message(
-                f"🪙 Claude Coin bot started\n\n"
+                f"🪙 Claude Coin Trading Bot Started! 🤖\n\n"
                 f"Mode: {mode}\n"
                 f"Tickers: {symbols_line}\n"
                 f"Interval: {cfg['interval_minutes']} min"
