@@ -3,6 +3,7 @@
 Send current status (account, positions, signals) and SMA charts to Telegram.
 Run manually: python3 status_report.py
 """
+import gc
 import os
 import sys
 from pathlib import Path
@@ -37,8 +38,13 @@ from report_helpers import (
 )
 
 
-def run_status_report():
-    """Fetch account, positions, signals and SMA charts; send all to Telegram."""
+def run_status_report(
+    trading_client=None,
+    data_client=None,
+):
+    """Fetch account, positions, signals and SMA charts; send all to Telegram.
+    Pass trading_client and/or data_client to reuse existing clients (e.g. from telegram_commands).
+    """
     symbols_raw = os.getenv("BOT_SYMBOLS", "SPY").strip()
     symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
     fast = int(os.getenv("BOT_FAST_SMA", "10"))
@@ -47,8 +53,10 @@ def run_status_report():
     from alpaca_client import get_data_client, get_trading_client
     paper_raw = os.getenv("BOT_PAPER", os.getenv("APCA_PAPER", "true")).lower()
     paper = paper_raw in ("true", "1", "yes")
-    trading_client = get_trading_client(paper=paper)
-    data_client = get_data_client()
+    if trading_client is None:
+        trading_client = get_trading_client(paper=paper)
+    if data_client is None:
+        data_client = get_data_client()
 
     from telegram_notify import send_message, send_photo
 
@@ -80,6 +88,14 @@ def run_status_report():
                         os.unlink(path)
                     except Exception:
                         pass
+
+    # Clear matplotlib state and encourage GC to reclaim report allocations
+    try:
+        import matplotlib.pyplot as plt
+        plt.close("all")
+    except Exception:
+        pass
+    gc.collect()
 
 
 def main():

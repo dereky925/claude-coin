@@ -33,6 +33,23 @@ if _env_file.is_file():
         pass
 
 
+# Reused Alpaca clients for /report and /status (avoids allocating new clients per run)
+_report_trading_client = None
+_report_data_client = None
+
+
+def _get_report_clients():
+    """Return (trading_client, data_client) for status reports, reusing one pair per process."""
+    global _report_trading_client, _report_data_client
+    if _report_trading_client is None or _report_data_client is None:
+        from alpaca_client import get_data_client, get_trading_client
+        paper_raw = os.getenv("BOT_PAPER", os.getenv("APCA_PAPER", "true")).lower()
+        paper = paper_raw in ("true", "1", "yes")
+        _report_trading_client = get_trading_client(paper=paper)
+        _report_data_client = get_data_client()
+    return _report_trading_client, _report_data_client
+
+
 def get_updates(token: str, offset: int | None = None):
     url = f"https://api.telegram.org/bot{token}/getUpdates?timeout=30"
     if offset is not None:
@@ -71,7 +88,8 @@ def main():
                     send_message("⏳ Building report…")
                     try:
                         from status_report import run_status_report
-                        run_status_report()
+                        tc, dc = _get_report_clients()
+                        run_status_report(trading_client=tc, data_client=dc)
                     except Exception as e:
                         send_message(f"❌ Report failed: {e}")
         except Exception as e:

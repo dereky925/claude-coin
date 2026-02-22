@@ -27,9 +27,13 @@ Or reload from ecosystem config (after editing ecosystem.config.cjs):
   pm2 logs claude-coin-bot
   pm2 logs telegram-commands
   pm2 logs claude-coin-bot --lines 50
+  
   pm2 restart claude-coin-bot
   pm2 restart telegram-commands
+
   pm2 stop claude-coin-bot
+  pm2 stop telegram-commands
+
   pm2 start claude-coin-bot
   pm2 flush claude-coin-bot
 

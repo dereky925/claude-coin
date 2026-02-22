@@ -68,10 +68,79 @@ def send_message(text: str) -> bool:
         return False
 
 
+class _MultipartPhotoReader:
+    """File-like that streams multipart/form-data for sendPhoto without loading the whole image into memory."""
+
+    def __init__(self, file_path: str, chat_id: str, boundary: str = "----ClaudeCoinBoundary"):
+        self._boundary = boundary.encode()
+        self._prefix = (
+            b"--" + self._boundary + b"\r\n"
+            b'Content-Disposition: form-data; name="chat_id"\r\n\r\n' + chat_id.encode() + b"\r\n"
+            b"--" + self._boundary + b"\r\n"
+            b'Content-Disposition: form-data; name="photo"; filename="chart.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n"
+        )
+        self._suffix = b"\r\n--" + self._boundary + b"--\r\n"
+        self._file = open(file_path, "rb")
+        self._file_size = os.path.getsize(file_path)
+        self._length = len(self._prefix) + self._file_size + len(self._suffix)
+        self._pos = 0
+        self._stage = "prefix"  # prefix -> file -> suffix
+
+    def read(self, size: int = -1) -> bytes:
+        if size == 0:
+            return b""
+        out = []
+        remaining = size if size > 0 else None
+        while True:
+            if self._stage == "prefix":
+                take = len(self._prefix) if remaining is None else min(remaining, len(self._prefix))
+                if take:
+                    out.append(self._prefix[:take])
+                    self._prefix = self._prefix[take:]
+                    self._pos += take
+                    if remaining is not None:
+                        remaining -= take
+                        if remaining == 0:
+                            return b"".join(out)
+                if not self._prefix:
+                    self._stage = "file"
+            if self._stage == "file":
+                chunk_size = 65536 if remaining is None or remaining > 65536 else remaining
+                data = self._file.read(chunk_size)
+                if data:
+                    out.append(data)
+                    self._pos += len(data)
+                    if remaining is not None:
+                        remaining -= len(data)
+                        if remaining == 0:
+                            return b"".join(out)
+                else:
+                    self._file.close()
+                    self._stage = "suffix"
+            if self._stage == "suffix":
+                take = len(self._suffix) if remaining is None else min(remaining, len(self._suffix))
+                if take:
+                    out.append(self._suffix[:take])
+                    self._suffix = self._suffix[take:]
+                    self._pos += take
+                    if remaining is not None:
+                        remaining -= take
+                        if remaining == 0:
+                            return b"".join(out)
+                if not self._suffix:
+                    return b"".join(out) if out else b""
+        return b"".join(out)
+
+    def __len__(self):
+        return self._length
+
+
 def send_photo(file_path: str) -> bool:
     """
     Send a photo to the configured Telegram chat.
     file_path: path to an image file (e.g. .png).
+    Streams the file in chunks to avoid loading the whole image into memory.
     Returns True if sent, False if not configured or on error.
     """
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -80,26 +149,19 @@ def send_photo(file_path: str) -> bool:
         return False
 
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
-    with open(file_path, "rb") as f:
-        data = f.read()
     boundary = "----ClaudeCoinBoundary"
-    body = (
-        b"--" + boundary.encode() + b"\r\n"
-        b'Content-Disposition: form-data; name="chat_id"\r\n\r\n' + chat_id.encode() + b"\r\n"
-        b"--" + boundary.encode() + b"\r\n"
-        b'Content-Disposition: form-data; name="photo"; filename="chart.png"\r\n'
-        b"Content-Type: image/png\r\n\r\n"
-        + data + b"\r\n"
-        b"--" + boundary.encode() + b"--\r\n"
-    )
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-
+    reader = _MultipartPhotoReader(file_path, chat_id, boundary)
     try:
+        req = urllib.request.Request(url, data=reader, method="POST")
+        req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+        req.add_header("Content-Length", str(len(reader)))
         with urllib.request.urlopen(req, timeout=15) as resp:
             return resp.status == 200
     except Exception:
         return False
+    finally:
+        if hasattr(reader, "_file") and reader._file and not reader._file.closed:
+            reader._file.close()
 
 
 def notify_trade(

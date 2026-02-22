@@ -10,6 +10,7 @@ module.exports = {
       max_restarts: 10,
       min_uptime: "10s",
       restart_delay: 5000,
+      max_memory_restart: "500M",
     },
     {
       name: "telegram-commands",
@@ -21,6 +22,7 @@ module.exports = {
       max_restarts: 10,
       min_uptime: "10s",
       restart_delay: 5000,
+      max_memory_restart: "500M",
     },
   ],
 };
