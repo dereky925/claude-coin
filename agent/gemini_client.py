@@ -92,6 +92,17 @@ def get_agent_action(
             contents=combined,
         )
         text = getattr(response, "text", None) or ""
-        return _parse_action_response(text)
+        out = _parse_action_response(text)
+        um = getattr(response, "usage_metadata", None)
+        if um is not None:
+            pin = getattr(um, "prompt_token_count", None) or getattr(um, "input_token_count", None) or 0
+            pout = getattr(um, "candidates_token_count", None) or getattr(um, "output_token_count", None) or 0
+            out["usage"] = {
+                "prompt_tokens": pin,
+                "output_tokens": pout,
+                "total_tokens": getattr(um, "total_token_count", None) or (pin + pout),
+                "estimated_usd": (pin / 1e6 * 0.30) + (pout / 1e6 * 2.50),
+            }
+        return out
     except Exception as e:
         return {"action": "skip", "reason": f"agent error: {e}"}

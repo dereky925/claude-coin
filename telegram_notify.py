@@ -173,12 +173,43 @@ def notify_trade(
     *,
     pnl_dollars: float | None = None,
     account_summary: str | None = None,
+    agent_reason: str | None = None,
+    news_links: list | None = None,
+    api_usage: dict | None = None,
 ) -> None:
     mode = "paper" if paper else "LIVE"
     msg = f"🔄 {mode} {side.upper()} {symbol} qty={qty} order_id={order_id}"
     if pnl_dollars is not None:
         sign = "+" if pnl_dollars >= 0 else ""
         msg += f"\n  P&L: {sign}${pnl_dollars:.2f}"
+    if agent_reason:
+        reason = (agent_reason[:500] + "…") if len(agent_reason) > 500 else agent_reason
+        msg += f"\n\n💭 {reason}"
+    if news_links:
+        msg += "\n\n📰 News:"
+        for r in (news_links[:5] if isinstance(news_links, list) else []):
+            title = (r.get("title") or "")[:60]
+            url = r.get("url") or ""
+            if url:
+                msg += f"\n• {title}\n  {url}"
+            else:
+                msg += f"\n• {title}"
+    if api_usage:
+        parts = []
+        g = api_usage.get("gemini") if isinstance(api_usage, dict) else None
+        if g and isinstance(g, dict):
+            pin = g.get("prompt_tokens") or g.get("input_tokens")
+            pout = g.get("output_tokens") or g.get("candidates_tokens")
+            est = g.get("estimated_usd")
+            if pin is not None or pout is not None:
+                parts.append(f"Gemini {pin or 0} in / {pout or 0} out")
+            if est is not None:
+                parts.append(f"~${est:.4f}")
+        t = api_usage.get("tavily") if isinstance(api_usage, dict) else None
+        if t and isinstance(t, dict) and t.get("credits") is not None:
+            parts.append(f"Tavily {t.get('credits')} cr")
+        if parts:
+            msg += "\n\n📊 API: " + " | ".join(parts)
     if account_summary:
         msg += f"\n\n{account_summary}"
     send_message(msg)

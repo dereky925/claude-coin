@@ -18,6 +18,9 @@ env/
 *.swp
 *.swo
 
+# Bot state (same-bar persistence)
+state/
+
 # OS
 .DS_Store
 Thumbs.db
