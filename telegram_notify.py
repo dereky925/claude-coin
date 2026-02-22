@@ -239,6 +239,6 @@ if __name__ == "__main__":
             print("  -> TELEGRAM_CHAT_ID is missing or empty")
         print(f"  (Loading .env from: {env_path})")
         exit(1)
-    ok = send_message("✅ Claude Coin Telegram test — if you see this, alerts will work.")
+    ok = send_message("✅ 🪙 Claude Coin Telegram test — if you see this, alerts will work.")
     print("Sent." if ok else "Failed to send (check token and chat_id).")
     exit(0 if ok else 1)

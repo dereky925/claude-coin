@@ -80,7 +80,7 @@ def _run_pm2_start_bot() -> tuple[bool, str]:
             text=True,
             timeout=10,
         )
-        return True, "Claude Coin Bot started and saved."
+        return True, "🪙 Trading bot started and saved."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -133,7 +133,7 @@ def _run_pm2_stop_bot() -> tuple[bool, str]:
         )
         if r.returncode != 0:
             return False, (r.stderr or r.stdout or "pm2 stop failed").strip()[:200]
-        return True, "Claude Coin Bot stopped."
+        return True, "🪙 Trading bot stopped."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -154,7 +154,7 @@ def _run_pm2_restart_bot() -> tuple[bool, str]:
         )
         if r.returncode != 0:
             return False, (r.stderr or r.stdout or "pm2 restart failed").strip()[:200]
-        return True, "Claude Coin Bot restarting."
+        return True, "🪙 Trading bot restarting."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -179,7 +179,16 @@ def main():
         return
 
     from telegram_notify import send_message
-    send_message("🤖 Telegram Command bot running. /report /status /news [/news SPY] /start /stop /restart")
+    send_message(
+        "🪙 Claude Coin — commands\n\n"
+        "/report — status + SMA charts\n"
+        "/status — same as report\n"
+        "/news — market news (SPY)\n"
+        "/news SYMBOL — news for a ticker\n"
+        "/start — start trading bot\n"
+        "/stop — stop trading bot\n"
+        "/restart — restart trading bot"
+    )
 
     offset = None
     while True:
