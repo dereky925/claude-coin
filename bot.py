@@ -33,6 +33,8 @@ def _config():
     slow = int(os.getenv("BOT_SLOW_SMA", "30"))
     interval_min = int(os.getenv("BOT_INTERVAL_MINUTES", "15"))
     position_size = int(os.getenv("BOT_POSITION_SIZE", "1"))
+    pd_raw = os.getenv("BOT_POSITION_DOLLARS", "").strip()
+    position_dollars = int(pd_raw) if pd_raw.isdigit() else None
     paper_raw = os.getenv("BOT_PAPER", os.getenv("APCA_PAPER", "true")).lower()
     paper = paper_raw in ("true", "1", "yes")
     return {
@@ -41,6 +43,7 @@ def _config():
         "slow_period": slow,
         "interval_minutes": max(1, interval_min),
         "position_size": max(1, position_size),
+        "position_dollars": position_dollars,
         "paper": paper,
     }
 
@@ -140,18 +143,23 @@ def run_once(cfg: dict, trading_client, data_client, log):
         qty = _get_position_qty(trading_client, symbol)
 
         if signal == "buy" and qty == 0:
+            latest_close = float(closes.iloc[-1])
+            if cfg.get("position_dollars"):
+                buy_qty = max(1, int(cfg["position_dollars"] / latest_close))
+            else:
+                buy_qty = cfg["position_size"]
             order_data = MarketOrderRequest(
                 symbol=symbol,
-                qty=cfg["position_size"],
+                qty=buy_qty,
                 side=OrderSide.BUY,
                 time_in_force=TimeInForce.DAY,
             )
             order = trading_client.submit_order(order_data=order_data)
-            log.info("%s BUY qty=%s order_id=%s", symbol, cfg["position_size"], order.id)
+            log.info("%s BUY qty=%s order_id=%s", symbol, buy_qty, order.id)
             try:
                 from telegram_notify import notify_trade
                 summary = _account_summary(trading_client)
-                notify_trade(symbol, "buy", cfg["position_size"], order.id, cfg["paper"], account_summary=summary)
+                notify_trade(symbol, "buy", buy_qty, order.id, cfg["paper"], account_summary=summary)
             except Exception:
                 pass
         elif signal == "sell" and qty > 0:

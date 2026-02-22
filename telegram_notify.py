@@ -68,6 +68,40 @@ def send_message(text: str) -> bool:
         return False
 
 
+def send_photo(file_path: str) -> bool:
+    """
+    Send a photo to the configured Telegram chat.
+    file_path: path to an image file (e.g. .png).
+    Returns True if sent, False if not configured or on error.
+    """
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    with open(file_path, "rb") as f:
+        data = f.read()
+    boundary = "----ClaudeCoinBoundary"
+    body = (
+        b"--" + boundary.encode() + b"\r\n"
+        b'Content-Disposition: form-data; name="chat_id"\r\n\r\n' + chat_id.encode() + b"\r\n"
+        b"--" + boundary.encode() + b"\r\n"
+        b'Content-Disposition: form-data; name="photo"; filename="chart.png"\r\n'
+        b"Content-Type: image/png\r\n\r\n"
+        + data + b"\r\n"
+        b"--" + boundary.encode() + b"--\r\n"
+    )
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def notify_trade(
     symbol: str,
     side: str,
