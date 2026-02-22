@@ -1,12 +1,12 @@
+# Claude Coin — command cheatsheet
+
 ## Start everything (after reboot or first time)
 
   cd "/root/Claude Coin"
   pm2 start ecosystem.config.cjs
   pm2 save
 
-(Telegram /start only starts the trading bot, not the full stack — use the above from the shell after a reboot.)
-
-# Claude Coin — command cheatsheet
+  pm2 stop all
 
 ## Restart bot / load new changes
 

@@ -80,7 +80,7 @@ def _run_pm2_start_bot() -> tuple[bool, str]:
             text=True,
             timeout=10,
         )
-        return True, "Bot started and saved."
+        return True, "Claude Coin Bot started and saved."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -133,7 +133,7 @@ def _run_pm2_stop_bot() -> tuple[bool, str]:
         )
         if r.returncode != 0:
             return False, (r.stderr or r.stdout or "pm2 stop failed").strip()[:200]
-        return True, "Bot stopped."
+        return True, "Claude Coin Bot stopped."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -154,7 +154,7 @@ def _run_pm2_restart_bot() -> tuple[bool, str]:
         )
         if r.returncode != 0:
             return False, (r.stderr or r.stdout or "pm2 restart failed").strip()[:200]
-        return True, "Bot restarting."
+        return True, "Claude Coin Bot restarting."
     except subprocess.TimeoutExpired:
         return False, "pm2 timed out"
     except FileNotFoundError:
@@ -179,7 +179,7 @@ def main():
         return
 
     from telegram_notify import send_message
-    send_message("🤖 Command bot running. /report /status /news [/news SPY] /start /stop /restart")
+    send_message("🤖 Telegram Command bot running. /report /status /news [/news SPY] /start /stop /restart")
 
     offset = None
     while True:
@@ -220,8 +220,8 @@ def main():
                     symbol = (parts[1].strip().upper() if len(parts) > 1 else "SPY") or "SPY"
                     send_message(f"⏳ News for {symbol}…")
                     try:
-                        from agent.tavily_client import search_market_news
-                        results = search_market_news(symbol)
+                        from agent.tavily_client import search_market_news_with_usage
+                        results, usage = search_market_news_with_usage(symbol)
                         if not results:
                             send_message(f"📰 No news found for {symbol}.")
                         else:
@@ -233,6 +233,9 @@ def main():
                                     lines.append(f"• {title}\n  {url}")
                                 else:
                                     lines.append(f"• {title}")
+                            cred = usage.get("credits")
+                            if cred is not None:
+                                lines.append(f"\n📊 API: Tavily {cred} cr")
                             msg = "\n".join(lines)
                             if len(msg) > 4000:
                                 msg = msg[:3997] + "..."
