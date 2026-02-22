@@ -62,8 +62,35 @@ def _pm2_cwd() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _run_pm2_start_bot() -> tuple[bool, str]:
+    """Run pm2 start <bot_app_name> then pm2 save. Does NOT start ecosystem (avoids restarting this process)."""
+    name = _pm2_bot_app_name()
+    try:
+        r1 = subprocess.run(
+            ["pm2", "start", name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if r1.returncode != 0:
+            return False, (r1.stderr or r1.stdout or "pm2 start failed").strip()[:200]
+        r2 = subprocess.run(
+            ["pm2", "save"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return True, "Bot started and saved."
+    except subprocess.TimeoutExpired:
+        return False, "pm2 timed out"
+    except FileNotFoundError:
+        return False, "pm2 not found (install PM2)"
+    except Exception as e:
+        return False, str(e)[:200]
+
+
 def _run_pm2_start_ecosystem() -> tuple[bool, str]:
-    """Run pm2 start ecosystem.config.cjs then pm2 save. Return (ok, message)."""
+    """Run pm2 start ecosystem.config.cjs then pm2 save. WARNING: restarts telegram-commands too (use from shell only)."""
     cwd = _pm2_cwd()
     ecosystem = cwd / "ecosystem.config.cjs"
     if not ecosystem.is_file():
@@ -180,7 +207,7 @@ def main():
                     except Exception as e:
                         send_message(f"❌ Report failed: {e}")
                 elif text_lower == "/start":
-                    ok, msg_out = _run_pm2_start_ecosystem()
+                    ok, msg_out = _run_pm2_start_bot()
                     send_message(f"✅ {msg_out}" if ok else f"❌ Start failed: {msg_out}")
                 elif text_lower == "/stop":
                     ok, msg_out = _run_pm2_stop_bot()
