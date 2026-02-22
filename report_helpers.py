@@ -131,3 +131,58 @@ def build_sma_plot(closes, symbol: str, fast_period: int, slow_period: int) -> s
     fig.savefig(tmp.name, dpi=100, bbox_inches="tight")
     plt.close(fig)
     return tmp.name
+
+
+def build_combined_sma_plot(
+    data_client,
+    symbols: list,
+    fast_period: int,
+    slow_period: int,
+) -> str | None:
+    """
+    One figure with a subplot per symbol (close + fast/slow SMA). Saves to a temp PNG.
+    Returns path to the file, or None on error. Caller must delete the file.
+    Best for reports with many symbols so you get one image instead of many.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from strategies.momentum import sma
+
+    n = len(symbols)
+    if n == 0:
+        return None
+    ncols = 2
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 3 * nrows))
+    if n == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    for i, symbol in enumerate(symbols):
+        ax = axes[i]
+        closes = get_bars(data_client, symbol, slow_period)
+        if closes is None or len(closes) < slow_period:
+            ax.text(0.5, 0.5, f"{symbol}\n(no data)", ha="center", va="center", transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            continue
+        fast = sma(closes, fast_period)
+        slow = sma(closes, slow_period)
+        ax.plot(closes.index, closes.values, label="Close", color="black", alpha=0.8)
+        ax.plot(fast.index, fast.values, label=f"SMA{fast_period}", color="green", alpha=0.8)
+        ax.plot(slow.index, slow.values, label=f"SMA{slow_period}", color="blue", alpha=0.8)
+        ax.set_title(symbol)
+        ax.legend(loc="upper left", fontsize=7)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis="both", labelsize=7)
+        fig.autofmt_xdate()
+    for j in range(i + 1, len(axes)):
+        axes[j].set_visible(False)
+    plt.tight_layout()
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp.close()
+    fig.savefig(tmp.name, dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    return tmp.name

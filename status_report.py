@@ -28,7 +28,13 @@ if _env_file.is_file():
     except Exception:
         pass
 
-from report_helpers import get_bars, build_sma_plot, get_account_status, get_signals_text
+from report_helpers import (
+    get_bars,
+    build_sma_plot,
+    build_combined_sma_plot,
+    get_account_status,
+    get_signals_text,
+)
 
 
 def run_status_report():
@@ -51,9 +57,9 @@ def run_status_report():
     msg = "📊 Status report\n\n" + status + "\n\n" + signals
     send_message(msg)
 
-    for symbol in symbols:
-        closes = get_bars(data_client, symbol, slow)
-        path = build_sma_plot(closes, symbol, fast, slow)
+    # One combined image when multiple symbols; otherwise one image per symbol
+    if len(symbols) > 1:
+        path = build_combined_sma_plot(data_client, symbols, fast, slow)
         if path:
             try:
                 send_photo(path)
@@ -62,6 +68,18 @@ def run_status_report():
                     os.unlink(path)
                 except Exception:
                     pass
+    else:
+        for symbol in symbols:
+            closes = get_bars(data_client, symbol, slow)
+            path = build_sma_plot(closes, symbol, fast, slow)
+            if path:
+                try:
+                    send_photo(path)
+                finally:
+                    try:
+                        os.unlink(path)
+                    except Exception:
+                        pass
 
 
 def main():

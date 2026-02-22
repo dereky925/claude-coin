@@ -28,7 +28,7 @@ if _env_file.is_file():
     except Exception:
         pass
 
-from report_helpers import get_bars, build_sma_plot
+from report_helpers import get_bars, build_sma_plot, build_combined_sma_plot
 
 
 def main():
@@ -47,9 +47,8 @@ def main():
 
     send_message(f"📈 Daily SMA report — {', '.join(symbols)}")
 
-    for symbol in symbols:
-        closes = get_bars(data_client, symbol, slow)
-        path = build_sma_plot(closes, symbol, fast, slow)
+    if len(symbols) > 1:
+        path = build_combined_sma_plot(data_client, symbols, fast, slow)
         if path:
             try:
                 send_photo(path)
@@ -58,6 +57,18 @@ def main():
                     os.unlink(path)
                 except Exception:
                     pass
+    else:
+        for symbol in symbols:
+            closes = get_bars(data_client, symbol, slow)
+            path = build_sma_plot(closes, symbol, fast, slow)
+            if path:
+                try:
+                    send_photo(path)
+                finally:
+                    try:
+                        os.unlink(path)
+                    except Exception:
+                        pass
 
 
 if __name__ == "__main__":

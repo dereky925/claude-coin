@@ -4,6 +4,7 @@
 
   cd "/root/Claude Coin"
   pm2 restart claude-coin-bot
+  pm2 restart telegram-commands
 
 Restart both trading bot and Telegram command listener:
 
@@ -14,6 +15,11 @@ Or reload from ecosystem config (after editing ecosystem.config.cjs):
   pm2 delete all
   pm2 start ecosystem.config.cjs
   pm2 save
+
+## Backtesting
+
+  .venv/bin/python3 backtest.py AAPL
+  .venv/bin/python3 backtest.py GOOGL
 
 ## PM2 basics
 
