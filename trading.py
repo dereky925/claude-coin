@@ -3,27 +3,9 @@
 Alpaca trading connection check and optional paper order.
 Loads credentials from .env. Run with --order SYMBOL to place one share market buy (paper).
 """
-import os
 import sys
-from pathlib import Path
 
-from dotenv import load_dotenv
-
-# Load .env from project root
-load_dotenv(Path(__file__).resolve().parent / ".env")
-
-def get_client():
-    api_key = os.getenv("APCA_API_KEY_ID")
-    secret = os.getenv("APCA_API_SECRET_KEY")
-    paper_raw = os.getenv("APCA_PAPER", "true").lower()
-    paper = paper_raw in ("true", "1", "yes")
-
-    if not api_key or not secret:
-        print("Missing APCA_API_KEY_ID or APCA_API_SECRET_KEY. Copy .env.example to .env and add your keys.", file=sys.stderr)
-        sys.exit(1)
-
-    from alpaca.trading.client import TradingClient
-    return TradingClient(api_key=api_key, secret_key=secret, paper=paper), paper
+from alpaca_client import get_trading_client, is_paper
 
 
 def main():
@@ -32,7 +14,8 @@ def main():
     parser.add_argument("--order", metavar="SYMBOL", help="Place a 1-share market BUY order (paper) for SYMBOL")
     args = parser.parse_args()
 
-    client, paper = get_client()
+    client = get_trading_client()
+    paper = is_paper()
     mode = "paper" if paper else "live"
     print(f"Using Alpaca {mode} trading.")
 
