@@ -52,9 +52,9 @@ def _config():
     use_agent = agent_raw in ("true", "1", "yes")
     skip_same_bar_raw = os.getenv("BOT_SKIP_SAME_BAR", "true").lower()
     skip_same_bar = skip_same_bar_raw in ("true", "1", "yes")
-    news_mode = (os.getenv("BOT_NEWS_MODE", "per_symbol") or "per_symbol").strip().lower()
+    news_mode = (os.getenv("BOT_NEWS_MODE", "hybrid") or "hybrid").strip().lower()
     if news_mode not in ("per_symbol", "general", "hybrid"):
-        news_mode = "per_symbol"
+        news_mode = "hybrid"
     return {
         "symbols": symbols,
         "fast_period": fast,
@@ -187,7 +187,7 @@ def run_once(cfg: dict, trading_client, data_client, log):
 
     use_agent = cfg.get("use_agent", False)
     skip_same_bar = cfg.get("skip_same_bar", True)
-    news_mode = cfg.get("news_mode", "per_symbol")
+    news_mode = cfg.get("news_mode", "hybrid")
     general_results, general_usage = [], {}
     general_fetched = False
 
