@@ -25,6 +25,7 @@ Or reload from ecosystem config (after editing ecosystem.config.cjs):
 
   .venv/bin/python3 backtest.py AAPL
   .venv/bin/python3 backtest.py GOOGL
+  .venv/bin/python3 backtest.py GOOGL --fast 10 --slow 30 --start 2022-06-01 --end 2024-01-01
 
 ## PM2 basics
 
