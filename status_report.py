@@ -62,7 +62,7 @@ def run_status_report(
 
     status = get_account_status(trading_client)
     signals = get_signals_text(data_client, symbols, fast, slow)
-    msg = "📊 Status report\n\n" + status + "\n\n" + signals
+    msg = "📊 Status Report 📈\n\n" + status + "\n\n" + signals
     send_message(msg)
 
     # One combined image when multiple symbols; otherwise one image per symbol

@@ -180,9 +180,8 @@ def main():
 
     from telegram_notify import send_message
     send_message(
-        "🪙 Claude Coin Commands 🦾\n\n"
-        "/report — status + SMA charts\n"
-        "/status — same as report\n"
+        "🪙 Claude Coin — commands\n\n"
+        "/status — status + SMA charts\n"
         "/news — market news (SPY)\n"
         "/news SYMBOL — news for a ticker\n"
         "/start — start trading bot\n"
@@ -207,14 +206,14 @@ def main():
                     continue
                 text = (msg.get("text") or "").strip()
                 text_lower = text.lower()
-                if text_lower in ("/report", "/status"):
-                    send_message("⏳ Building report…")
+                if text_lower == "/status":
+                    send_message("⏳ Building status…")
                     try:
                         from status_report import run_status_report
                         tc, dc = _get_report_clients()
                         run_status_report(trading_client=tc, data_client=dc)
                     except Exception as e:
-                        send_message(f"❌ Report failed: {e}")
+                        send_message(f"❌ Status failed: {e}")
                 elif text_lower == "/start":
                     ok, msg_out = _run_pm2_start_bot()
                     send_message(f"✅ {msg_out}" if ok else f"❌ Start failed: {msg_out}")
