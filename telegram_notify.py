@@ -217,7 +217,7 @@ def notify_trade(
 
 def notify_account_status(summary: str) -> None:
     """Send account status (equity, cash, positions)."""
-    send_message(f"📊 Account\n\n{summary}")
+    send_message(f"📊 Account 📈\n\n{summary}")
 
 
 def notify_error(message: str) -> None:
