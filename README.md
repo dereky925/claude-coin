@@ -45,7 +45,7 @@ The **SMA remains the primary signal**; the agent only adjusts whether and how m
 
 ---
 
-## Project structure and what calls what
+## Project Structure
 
 ### Main scripts (entry points)
 

@@ -47,10 +47,11 @@ def _is_configured() -> bool:
     return bool(token and chat_id)
 
 
-def send_message(text: str) -> bool:
+def send_message(text: str, parse_mode: str | None = None) -> bool:
     """
     Send a text message to the configured Telegram chat.
     Returns True if sent, False if not configured or on error.
+    parse_mode: optional "Markdown" or "HTML" for formatting.
     """
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -58,7 +59,10 @@ def send_message(text: str) -> bool:
         return False
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    body = json.dumps({"chat_id": chat_id, "text": text, "disable_web_page_preview": True}).encode("utf-8")
+    payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST", headers={"Content-Type": "application/json"})
 
     try:

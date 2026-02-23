@@ -142,6 +142,26 @@ def _run_pm2_stop_bot() -> tuple[bool, str]:
         return False, str(e)[:200]
 
 
+def get_system_stats() -> str:
+    """Return server CPU, RAM, and disk stats. Safe to call from Telegram handler."""
+    try:
+        import psutil
+        import shutil
+        cpu = psutil.cpu_percent(interval=1)
+        ram = psutil.virtual_memory()
+        disk = shutil.disk_usage("/")
+        return (
+            f"📊 *Server Stats*\n"
+            f"🖥 CPU: {cpu}%\n"
+            f"🧠 RAM: {ram.percent}% ({ram.used // (1024**2)}MB / {ram.total // (1024**2)}MB)\n"
+            f"💽 Disk: {(disk.used/disk.total)*100:.1f}%"
+        )
+    except ImportError:
+        return "📊 Server stats require psutil. Run: pip install psutil"
+    except Exception as e:
+        return f"📊 Stats error: {e}"
+
+
 def _run_pm2_restart_bot() -> tuple[bool, str]:
     """Run pm2 restart <bot_app_name>. Return (ok, message)."""
     name = _pm2_bot_app_name()
@@ -184,6 +204,7 @@ def main():
         "/status — status + SMA charts\n"
         "/news — market news (SPY)\n"
         "/news SYMBOL — news for a ticker\n"
+        "/droplet — server CPU/RAM/disk\n"
         "/start — start trading bot\n"
         "/stop — stop trading bot\n"
         "/restart — restart trading bot"
@@ -223,6 +244,8 @@ def main():
                 elif text_lower == "/restart":
                     ok, msg_out = _run_pm2_restart_bot()
                     send_message(f"✅ {msg_out}" if ok else f"❌ Restart failed: {msg_out}")
+                elif text_lower == "/droplet":
+                    send_message(get_system_stats(), parse_mode="Markdown")
                 elif text_lower == "/news" or text_lower.startswith("/news "):
                     parts = text.split(maxsplit=1)
                     symbol = (parts[1].strip().upper() if len(parts) > 1 else "SPY") or "SPY"
