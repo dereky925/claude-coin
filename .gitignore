@@ -17,6 +17,7 @@ env/
 .vscode/
 *.swp
 *.swo
+*.png
 
 # Bot state (same-bar persistence)
 state/

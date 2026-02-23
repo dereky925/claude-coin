@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
 
-from strategies.momentum import signals
+from strategies.momentum import signals, sma
 
 
 def run_backtest(
@@ -19,9 +19,9 @@ def run_backtest(
     start: str | None = None,
     end: str | None = None,
     initial_capital: float = 100_000.0,
-) -> tuple[pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, dict, dict]:
     """
-    Run backtest. Returns (equity curve DataFrame, metrics dict).
+    Run backtest. Returns (equity curve DataFrame, metrics dict, plot_data dict).
     """
     if end is None:
         end = datetime.now()
@@ -97,6 +97,7 @@ def run_backtest(
     spy_end_dt = df.index[-1]
     spy_start = spy_start_dt.strftime("%Y-%m-%d") if hasattr(spy_start_dt, "strftime") else str(spy_start_dt)[:10]
     spy_end = spy_end_dt.strftime("%Y-%m-%d") if hasattr(spy_end_dt, "strftime") else str(spy_end_dt)[:10]
+    spy_df = None
     if symbol.upper() == "SPY":
         spy_return_pct = buy_hold_return_pct
         spy_max_dd_pct = buy_hold_max_dd_pct
@@ -105,6 +106,7 @@ def run_backtest(
         spy_df = spy_ticker.history(start=spy_start, end=spy_end, auto_adjust=True)
         if spy_df.empty or len(spy_df) < 2:
             spy_return_pct = spy_max_dd_pct = None
+            spy_df = None
         else:
             spy_first_open = spy_df["Open"].iloc[0]
             spy_last_close = spy_df["Close"].iloc[-1]
@@ -130,7 +132,98 @@ def run_backtest(
         "spy_return_pct": spy_return_pct,
         "spy_max_dd_pct": spy_max_dd_pct,
     }
-    return eq_df, metrics
+
+    # Plot data: backtest window only (same index as eq_df)
+    close_slice = closes.iloc[slow_period:]
+    fast_sma_full = sma(closes, fast_period)
+    slow_sma_full = sma(closes, slow_period)
+    # Cumulative % return from start (for second subplot)
+    strategy_pct = (eq_df["equity"] / initial_capital - 1.0) * 100
+    bh_pct = (bh_equity / initial_capital - 1.0) * 100
+    if symbol.upper() == "SPY":
+        spy_pct = bh_pct.copy()
+    elif spy_df is not None:
+        spy_close_aligned = spy_df["Close"].reindex(eq_df.index, method="ffill").bfill()
+        spy_pct = (spy_close_aligned / spy_close_aligned.iloc[0] - 1.0) * 100
+    else:
+        spy_pct = None  # no SPY data to plot
+    plot_data = {
+        "close": close_slice,
+        "fast_sma": fast_sma_full.iloc[slow_period:],
+        "slow_sma": slow_sma_full.iloc[slow_period:],
+        "trades": trades,
+        "strategy_pct": strategy_pct,
+        "bh_pct": bh_pct,
+        "spy_pct": spy_pct,
+    }
+    return eq_df, metrics, plot_data
+
+
+def plot_backtest(plot_data: dict, symbol: str, metrics: dict, save_path: str) -> None:
+    """
+    Generate a two-panel plot: price + SMAs + buy/sell markers, and cumulative % returns (strategy vs B&H symbol vs SPY).
+    Saves to save_path. Uses Agg backend for headless use.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    close = plot_data["close"]
+    fast_sma = plot_data["fast_sma"]
+    slow_sma = plot_data["slow_sma"]
+    trades = plot_data["trades"]
+    strategy_pct = plot_data["strategy_pct"]
+    bh_pct = plot_data["bh_pct"]
+    spy_pct = plot_data.get("spy_pct")
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+
+    # Top: price + SMAs + buy/sell
+    ax1.plot(close.index, close.values, label="Close", color="black", alpha=0.8)
+    ax1.plot(fast_sma.index, fast_sma.values, label=f"SMA {metrics['fast_period']}", color="green", alpha=0.8)
+    ax1.plot(slow_sma.index, slow_sma.values, label=f"SMA {metrics['slow_period']}", color="blue", alpha=0.8)
+    buys = [t for t in trades if t["side"] == "buy"]
+    sells = [t for t in trades if t["side"] == "sell"]
+    if buys:
+        ax1.scatter(
+            [t["date"] for t in buys],
+            [t["price"] for t in buys],
+            marker="^",
+            color="green",
+            s=80,
+            zorder=5,
+            label="Buy",
+        )
+    if sells:
+        ax1.scatter(
+            [t["date"] for t in sells],
+            [t["price"] for t in sells],
+            marker="v",
+            color="red",
+            s=80,
+            zorder=5,
+            label="Sell",
+        )
+    ax1.set_title(f"{symbol} — Price, SMAs & Trades ({metrics['start']} → {metrics['end']})")
+    ax1.legend(loc="upper left")
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylabel("Price ($)")
+
+    # Bottom: cumulative % return — strategy, buy & hold symbol, SPY
+    ax2.plot(strategy_pct.index, strategy_pct.values, label="Strategy", color="black", alpha=0.8)
+    ax2.plot(bh_pct.index, bh_pct.values, label=f"Buy & hold {symbol}", color="blue", alpha=0.8)
+    if spy_pct is not None and symbol.upper() != "SPY":
+        ax2.plot(spy_pct.index, spy_pct.values, label="SPY", color="gray", alpha=0.8)
+    ax2.axhline(0, color="gray", linestyle="--", alpha=0.5)
+    ax2.set_ylabel("Cumulative return (%)")
+    ax2.set_title("Cumulative % return")
+    ax2.legend(loc="upper left")
+    ax2.grid(True, alpha=0.3)
+
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    fig.savefig(save_path, dpi=100, bbox_inches="tight")
+    plt.close(fig)
 
 
 def main():
@@ -142,9 +235,11 @@ def main():
     parser.add_argument("--end", default=None, help="End date YYYY-MM-DD")
     parser.add_argument("--capital", type=float, default=100_000.0, help="Initial capital")
     parser.add_argument("--csv", metavar="FILE", help="Save equity curve to CSV")
+    parser.add_argument("--plot", action="store_true", help="Save backtest plot to file")
+    parser.add_argument("--plot-out", metavar="FILE", default=None, help="Plot output path (default: backtest_<SYMBOL>.png)")
     args = parser.parse_args()
 
-    eq_df, m = run_backtest(
+    eq_df, m, plot_data = run_backtest(
         symbol=args.symbol.upper(),
         fast_period=args.fast,
         slow_period=args.slow,
@@ -174,6 +269,11 @@ def main():
     if args.csv:
         eq_df.to_csv(args.csv)
         print(f"  Equity curve saved to {args.csv}")
+
+    if args.plot:
+        path = args.plot_out or f"backtest_{m['symbol']}.png"
+        plot_backtest(plot_data, m["symbol"], m, save_path=path)
+        print(f"  Plot saved to {path}")
 
 
 if __name__ == "__main__":
