@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backtest momentum (SMA crossover) strategy on historical daily bars.
-Uses yfinance for data — no API keys required. Same strategy logic as the live bot.
+Backtest strategies (SMA, RSI, MACD) on historical daily bars.
+Uses yfinance for data — no API keys required. Same strategy logic as the live bot for SMA.
 """
 import argparse
 from datetime import datetime, timedelta
@@ -9,19 +9,27 @@ from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
 
-from strategies.momentum import signals, sma
+from strategies import momentum, rsi as rsi_mod, macd as macd_mod
+
+# Strategy registry: name -> (signals_fn, min_bars_fn)
+STRATEGIES = {
+    "sma": (momentum.signals, momentum.min_bars),
+    "rsi": (rsi_mod.signals, rsi_mod.min_bars),
+    "macd": (macd_mod.signals, macd_mod.min_bars),
+}
 
 
-def run_backtest(
+def run_backtest_generic(
     symbol: str,
-    fast_period: int = 10,
-    slow_period: int = 30,
     start: str | None = None,
     end: str | None = None,
     initial_capital: float = 100_000.0,
+    strategy: str = "sma",
+    **strategy_params,
 ) -> tuple[pd.DataFrame, dict, dict]:
     """
-    Run backtest. Returns (equity curve DataFrame, metrics dict, plot_data dict).
+    Run backtest for any registered strategy. Returns (equity curve DataFrame, metrics dict, plot_data dict).
+    strategy_params: sma -> fast_period, slow_period; rsi -> period, oversold, overbought; macd -> fast_ema, slow_ema, signal_ema.
     """
     if end is None:
         end = datetime.now()
@@ -29,52 +37,42 @@ def run_backtest(
         start = (datetime.now() - timedelta(days=365 * 2)).strftime("%Y-%m-%d")
     if isinstance(end, datetime):
         end = end.strftime("%Y-%m-%d")
-
+    if strategy not in STRATEGIES:
+        raise ValueError(f"Unknown strategy: {strategy}. Choose from {list(STRATEGIES)}")
+    signals_fn, min_bars_fn = STRATEGIES[strategy]
+    min_bars = min_bars_fn(**strategy_params)
     ticker = yf.Ticker(symbol)
     df = ticker.history(start=start, end=end, auto_adjust=True)
-    if df.empty or len(df) < slow_period:
-        raise ValueError(f"Not enough data for {symbol} (need at least {slow_period} bars)")
+    if df.empty or len(df) < min_bars:
+        raise ValueError(f"Not enough data for {symbol} (need at least {min_bars} bars, got {len(df)})")
 
     closes = df["Close"]
-    sig = signals(closes, fast_period=fast_period, slow_period=slow_period)
+    sig = signals_fn(closes, **strategy_params)
 
-    # Simulate: we get signal at bar i, act at bar i+1 open (no lookahead)
-    position = 0  # 0 = flat, 1 = long
+    position = 0
     cash = initial_capital
     shares = 0.0
     equity_curve = []
     trades = []
 
-    for i in range(slow_period, len(df)):
+    for i in range(min_bars, len(df)):
         today_open = df["Open"].iloc[i]
         today_close = df["Close"].iloc[i]
         prev_signal = sig.iloc[i - 1] if i > 0 else 0
-        curr_signal = sig.iloc[i]
-
-        # Execute at today's open based on previous bar's signal
         if prev_signal > 0 and position == 0:
-            # Buy at open
             trades.append({"date": df.index[i], "price": today_open, "side": "buy"})
             shares = cash / today_open
             cash = 0.0
             position = 1
         elif prev_signal < 0 and position == 1:
-            # Sell at open
             trades.append({"date": df.index[i], "price": today_open, "side": "sell"})
             cash = shares * today_open
             shares = 0.0
             position = 0
-
-        # Mark-to-market at close for equity
-        if position == 1:
-            equity = shares * today_close
-        else:
-            equity = cash
+        equity = shares * today_close if position == 1 else cash
         equity_curve.append({"date": df.index[i], "equity": equity, "position": position})
 
     eq_df = pd.DataFrame(equity_curve).set_index("date")
-
-    # Strategy metrics
     total_return = (eq_df["equity"].iloc[-1] / initial_capital - 1.0) * 100
     eq_series = eq_df["equity"]
     rolling_max = eq_series.expanding().max()
@@ -82,18 +80,16 @@ def run_backtest(
     max_drawdown_pct = drawdown.min() * 100
     n_trades = (eq_df["position"].diff().abs() > 0).sum()
 
-    # Buy-and-hold same symbol (same period: first open at slow_period to last close)
-    first_open = df["Open"].iloc[slow_period]
+    first_open = df["Open"].iloc[min_bars]
     last_close = df["Close"].iloc[-1]
     bh_shares = initial_capital / first_open
     bh_final = bh_shares * last_close
     buy_hold_return_pct = (bh_final / initial_capital - 1.0) * 100
-    bh_equity = initial_capital * (df["Close"].iloc[slow_period:] / first_open)
+    bh_equity = initial_capital * (df["Close"].iloc[min_bars:] / first_open)
     bh_rolling_max = bh_equity.expanding().max()
     buy_hold_max_dd_pct = ((bh_equity - bh_rolling_max) / bh_rolling_max).min() * 100
 
-    # Buy-and-hold SPY over same calendar period (benchmark)
-    spy_start_dt = df.index[slow_period]
+    spy_start_dt = df.index[min_bars]
     spy_end_dt = df.index[-1]
     spy_start = spy_start_dt.strftime("%Y-%m-%d") if hasattr(spy_start_dt, "strftime") else str(spy_start_dt)[:10]
     spy_end = spy_end_dt.strftime("%Y-%m-%d") if hasattr(spy_end_dt, "strftime") else str(spy_end_dt)[:10]
@@ -120,8 +116,7 @@ def run_backtest(
         "symbol": symbol,
         "start": start,
         "end": end,
-        "fast_period": fast_period,
-        "slow_period": slow_period,
+        "strategy": strategy,
         "initial_capital": initial_capital,
         "final_equity": eq_df["equity"].iloc[-1],
         "total_return_pct": total_return,
@@ -132,12 +127,9 @@ def run_backtest(
         "spy_return_pct": spy_return_pct,
         "spy_max_dd_pct": spy_max_dd_pct,
     }
+    metrics.update(strategy_params)
 
-    # Plot data: backtest window only (same index as eq_df)
-    close_slice = closes.iloc[slow_period:]
-    fast_sma_full = sma(closes, fast_period)
-    slow_sma_full = sma(closes, slow_period)
-    # Cumulative % return from start (for second subplot)
+    close_slice = closes.iloc[min_bars:]
     strategy_pct = (eq_df["equity"] / initial_capital - 1.0) * 100
     bh_pct = (bh_equity / initial_capital - 1.0) * 100
     if symbol.upper() == "SPY":
@@ -146,17 +138,39 @@ def run_backtest(
         spy_close_aligned = spy_df["Close"].reindex(eq_df.index, method="ffill").bfill()
         spy_pct = (spy_close_aligned / spy_close_aligned.iloc[0] - 1.0) * 100
     else:
-        spy_pct = None  # no SPY data to plot
+        spy_pct = None
     plot_data = {
         "close": close_slice,
-        "fast_sma": fast_sma_full.iloc[slow_period:],
-        "slow_sma": slow_sma_full.iloc[slow_period:],
         "trades": trades,
         "strategy_pct": strategy_pct,
         "bh_pct": bh_pct,
         "spy_pct": spy_pct,
     }
+    if strategy == "sma":
+        from strategies.momentum import sma
+        plot_data["fast_sma"] = sma(closes, strategy_params["fast_period"]).iloc[min_bars:]
+        plot_data["slow_sma"] = sma(closes, strategy_params["slow_period"]).iloc[min_bars:]
     return eq_df, metrics, plot_data
+
+
+def run_backtest(
+    symbol: str,
+    fast_period: int = 10,
+    slow_period: int = 30,
+    start: str | None = None,
+    end: str | None = None,
+    initial_capital: float = 100_000.0,
+) -> tuple[pd.DataFrame, dict, dict]:
+    """Run backtest for SMA strategy (backward-compatible)."""
+    return run_backtest_generic(
+        symbol=symbol,
+        start=start,
+        end=end,
+        initial_capital=initial_capital,
+        strategy="sma",
+        fast_period=fast_period,
+        slow_period=slow_period,
+    )
 
 
 def plot_backtest(plot_data: dict, symbol: str, metrics: dict, save_path: str) -> None:
@@ -169,8 +183,6 @@ def plot_backtest(plot_data: dict, symbol: str, metrics: dict, save_path: str) -
     import matplotlib.pyplot as plt
 
     close = plot_data["close"]
-    fast_sma = plot_data["fast_sma"]
-    slow_sma = plot_data["slow_sma"]
     trades = plot_data["trades"]
     strategy_pct = plot_data["strategy_pct"]
     bh_pct = plot_data["bh_pct"]
@@ -178,10 +190,11 @@ def plot_backtest(plot_data: dict, symbol: str, metrics: dict, save_path: str) -
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
 
-    # Top: price + SMAs + buy/sell
+    # Top: price + optional SMAs + buy/sell
     ax1.plot(close.index, close.values, label="Close", color="black", alpha=0.8)
-    ax1.plot(fast_sma.index, fast_sma.values, label=f"SMA {metrics['fast_period']}", color="green", alpha=0.8)
-    ax1.plot(slow_sma.index, slow_sma.values, label=f"SMA {metrics['slow_period']}", color="blue", alpha=0.8)
+    if "fast_sma" in plot_data and "slow_sma" in plot_data:
+        ax1.plot(plot_data["fast_sma"].index, plot_data["fast_sma"].values, label=f"SMA {metrics.get('fast_period', '')}", color="green", alpha=0.8)
+        ax1.plot(plot_data["slow_sma"].index, plot_data["slow_sma"].values, label=f"SMA {metrics.get('slow_period', '')}", color="blue", alpha=0.8)
     buys = [t for t in trades if t["side"] == "buy"]
     sells = [t for t in trades if t["side"] == "sell"]
     if buys:
@@ -204,7 +217,7 @@ def plot_backtest(plot_data: dict, symbol: str, metrics: dict, save_path: str) -
             zorder=5,
             label="Sell",
         )
-    ax1.set_title(f"{symbol} — Price, SMAs & Trades ({metrics['start']} → {metrics['end']})")
+    ax1.set_title(f"{symbol} — {metrics.get('strategy', 'SMA')} ({metrics['start']} → {metrics['end']})")
     ax1.legend(loc="upper left")
     ax1.grid(True, alpha=0.3)
     ax1.set_ylabel("Price ($)")

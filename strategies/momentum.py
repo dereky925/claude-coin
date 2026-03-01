@@ -50,3 +50,8 @@ def signal_at_end(
     if v < 0:
         return "sell"
     return "hold"
+
+
+def min_bars(fast_period: int = 10, slow_period: int = 30, **kwargs) -> int:
+    """Minimum bars needed before first signal."""
+    return slow_period

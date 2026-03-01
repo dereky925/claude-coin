@@ -54,6 +54,7 @@ The **SMA remains the primary signal**; the agent only adjusts whether and how m
 | **`bot.py`** | **Main trading loop.** Run this for the live/paper bot. Loads config from `.env`, connects to Alpaca via `alpaca_client`, and every `BOT_INTERVAL_MINUTES` runs one cycle: market-hours check → for each symbol fetch bars → SMA signal → optional agent → place orders → Telegram notify. Uses `strategies.momentum.signal_at_end` and optionally `agent.agent.get_agent_action`. |
 | **`telegram_commands.py`** | **Telegram command listener.** Long-polls Telegram; when you send `/status`, `/news`, `/start`, `/stop`, `/restart` from the allowed chat it runs the right handler (status report, news fetch, or PM2 start/stop/restart for the trading bot). Uses `alpaca_client` and `status_report` for `/status`, and `agent.tavily_client` for `/news`. |
 | **`backtest.py`** | **Backtest the same SMA strategy** on historical daily data (Yahoo Finance). No Alpaca keys needed. Uses `strategies.momentum.signals` (full series). |
+| **`backtest_sweep.py`** | **Sweep** symbols and (fast, slow) params; optional **out-of-sample validation** for top N combos. Uses `backtest.run_backtest`. |
 | **`trading.py`** | **One-off Alpaca check and optional single order.** Prints account info; with `--order SYMBOL` places one market buy (paper by default). Uses `alpaca_client` only. |
 | **`status_report.py`** | **Build and send status + SMA charts to Telegram.** Used by `/status` (via `telegram_commands`) or run manually. Uses `report_helpers`, `alpaca_client`, `telegram_notify`. |
 | **`daily_report.py`** | **Daily SMA chart report.** Intended for cron (e.g. once per day). Sends charts to Telegram. |
@@ -271,14 +272,44 @@ python3 trading.py --order AAPL
 
 ### Backtest (no API keys)
 
-Uses Yahoo Finance:
+Uses Yahoo Finance. Supports **SMA** (default), **RSI**, and **MACD**:
 
 ```bash
 python3 backtest.py SPY
 python3 backtest.py AAPL --fast 10 --slow 30 --start 2022-01-01 --csv equity.csv
 ```
 
-Options: `--fast`, `--slow`, `--start`, `--end`, `--capital`, `--csv FILE`.
+SMA options: `--fast`, `--slow`, `--start`, `--end`, `--capital`, `--csv FILE`.  
+From code you can use `run_backtest_generic(symbol, start, end, strategy="rsi", period=14, oversold=30, overbought=70)` or `strategy="macd", fast_ema=12, slow_ema=26, signal_ema=9`.
+
+### Backtest sweep and OOS validation
+
+`backtest_sweep.py` runs backtests over a grid of **symbols** and **strategy params** (SMA, RSI, MACD), then optionally validates the top N out-of-sample:
+
+```bash
+# SMA only (default), default symbols
+python3 backtest_sweep.py --start 2020-01-01 --end 2023-12-31 --csv sweep.csv
+
+# All strategies (SMA + RSI + MACD), large symbol list (40+), long timeframe (2010 → 2024)
+python3 backtest_sweep.py --strategy all --large --start 2010-01-01 --oos-start 2024-01-01 --top 25 --csv sweep_large.csv --oos-csv oos_large.csv
+```
+
+Options: `--strategy sma|rsi|macd|all`, `--symbols` (comma-separated), `--large` (use 40+ symbols and default start 2010-01-01), `--fast` / `--slow` (SMA only), `--capital`, `--max-dd-cap`, `--min-oos-return` / `--min-oos-excess`, `--oos-start`, `--top`, `--csv`, `--oos-csv`. Uses Yahoo Finance (network required).
+
+### Robustness experiments (avoid overfitting)
+
+`experiments_robustness.py` checks that a strategy works **across many symbols** and **multiple OOS periods**, not just on one hot ticker:
+
+```bash
+python3 experiments_robustness.py --sweep-csv sweep_large.csv --top 10
+```
+
+- Ranks strategies by **median** excess vs SPY (trimmed) across symbols.  
+- Runs **equal-weight portfolio** backtest on a fixed diversified universe.  
+- Tests **three OOS windows** (2017–19, 2020–22, 2023–now).  
+- Reports **rolling 2-year** profitability on SPY.  
+
+See **[RECOMMENDATION.md](RECOMMENDATION.md)** for the evidence-based live config (SMA 20/40 or 15/50 on a diversified symbol list).
 
 ### Test agentic layer
 

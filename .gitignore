@@ -18,6 +18,7 @@ env/
 *.swp
 *.swo
 *.png
+*.csv
 
 # Bot state (same-bar persistence)
 state/
